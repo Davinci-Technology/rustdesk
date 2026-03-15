@@ -65,7 +65,7 @@ impl RendezvousMediator {
             }
         }
         crate::hbbs_http::sync::start();
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", not(feature = "compass-rmm")))]
         if crate::platform::is_installed() && crate::is_server() {
             crate::updater::start_auto_update();
         }

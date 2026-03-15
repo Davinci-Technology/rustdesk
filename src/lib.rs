@@ -53,8 +53,11 @@ mod port_forward;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod plugin;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "compass-rmm")))]
 mod tray;
+
+#[cfg(feature = "compass-rmm")]
+pub mod headless_cm;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod whiteboard;

@@ -51,6 +51,7 @@ vcpkg_cmake_configure(
         -DENABLE_TESTDATA=OFF
         -DENABLE_TESTS=OFF
         -DENABLE_TOOLS=OFF
+        -DENABLE_AVX512=OFF
 )
 
 vcpkg_cmake_install()

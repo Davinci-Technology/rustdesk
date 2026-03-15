@@ -31,6 +31,11 @@ target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_BUILD=${FLUTT
 # Disable Windows macros that collide with C++ standard library functions.
 target_compile_definitions(${BINARY_NAME} PRIVATE "NOMINMAX")
 
+# Pass COMPASS_VIEWER define to C++ sources for conditional branding.
+if(DEFINED ENV{COMPASS_VIEWER} OR COMPASS_VIEWER)
+  target_compile_definitions(${BINARY_NAME} PRIVATE "COMPASS_VIEWER")
+endif()
+
 # Add dependency libraries and include directories. Add any application-specific
 # dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)

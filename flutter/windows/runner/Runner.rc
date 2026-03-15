@@ -89,6 +89,16 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
+#ifdef COMPASS_VIEWER
+            VALUE "CompanyName", "Davinci Solutions" "\0"
+            VALUE "FileDescription", "Compass RMM Viewer" "\0"
+            VALUE "FileVersion", VERSION_AS_STRING "\0"
+            VALUE "InternalName", "compass-viewer" "\0"
+            VALUE "LegalCopyright", "Copyright © 2025 Davinci Solutions. All rights reserved." "\0"
+            VALUE "OriginalFilename", "compass-viewer.exe" "\0"
+            VALUE "ProductName", "Compass RMM" "\0"
+            VALUE "ProductVersion", VERSION_AS_STRING "\0"
+#else
             VALUE "CompanyName", "Purslane Ltd" "\0"
             VALUE "FileDescription", "RustDesk Remote Desktop" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
@@ -97,6 +107,7 @@ BEGIN
             VALUE "OriginalFilename", "rustdesk.exe" "\0"
             VALUE "ProductName", "RustDesk" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
+#endif
         END
     END
     BLOCK "VarFileInfo"

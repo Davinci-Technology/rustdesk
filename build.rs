@@ -84,6 +84,15 @@ fn main() {
     build_manifest();
     #[cfg(windows)]
     build_windows();
+    #[cfg(all(windows, feature = "compass-rmm"))]
+    {
+        let mut res = winres::WindowsResource::new();
+        res.set("ProductName", "Compass RMM");
+        res.set("FileDescription", "Compass RMM Remote Agent");
+        res.set("OriginalFilename", "compass-rmm.exe");
+        res.set_icon("res/icon.ico");
+        res.compile().unwrap();
+    }
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os == "macos" {
         #[cfg(target_os = "macos")]
