@@ -1783,6 +1783,11 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
 }
 
 pub fn load_custom_client() {
+    #[cfg(feature = "compass-rmm")]
+    {
+        *config::APP_NAME.write().unwrap() = "Compass RMM".to_owned();
+        return;
+    }
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());

@@ -79,7 +79,7 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         i += 1;
     }
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(all(any(target_os = "linux", target_os = "windows"), not(feature = "compass-rmm")))]
     if args.is_empty() {
         #[cfg(target_os = "linux")]
         let should_check_start_tray = crate::check_process("--server", false);
@@ -114,6 +114,34 @@ pub fn core_main() -> Option<Vec<String>> {
     #[cfg(windows)]
     if args.contains(&"--connect".to_string()) || args.contains(&"--view-camera".to_string()) {
         hbb_common::platform::windows::start_cpu_performance_monitor();
+    }
+    // Apply server config flags early so they take effect before any connection attempt.
+    // This handles --rendezvous-server, --relay-server, and --key for both
+    // the headless agent and the Flutter viewer (--connect).
+    {
+        let mut j = 0;
+        while j < args.len() {
+            match args[j].as_str() {
+                "--rendezvous-server" if j + 1 < args.len() => {
+                    crate::ui_interface::set_option(
+                        "custom-rendezvous-server".into(),
+                        args[j + 1].clone(),
+                    );
+                    j += 2;
+                }
+                "--relay-server" if j + 1 < args.len() => {
+                    crate::ui_interface::set_option("relay-server".into(), args[j + 1].clone());
+                    j += 2;
+                }
+                "--key" if j + 1 < args.len() => {
+                    crate::ui_interface::set_option("key".into(), args[j + 1].clone());
+                    j += 2;
+                }
+                _ => {
+                    j += 1;
+                }
+            }
+        }
     }
     #[cfg(feature = "flutter")]
     if _is_flutter_invoke_new_connection {
@@ -193,7 +221,7 @@ pub fn core_main() -> Option<Vec<String>> {
         }
         std::thread::spawn(move || crate::start_server(false, no_server));
     } else {
-        #[cfg(windows)]
+        #[cfg(all(windows, not(feature = "compass-rmm")))]
         {
             use crate::platform;
             if args[0] == "--uninstall" {
@@ -311,7 +339,7 @@ pub fn core_main() -> Option<Vec<String>> {
                 return None;
             }
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", not(feature = "compass-rmm")))]
         {
             use crate::platform;
             if args[0] == "--update" {
@@ -354,24 +382,70 @@ pub fn core_main() -> Option<Vec<String>> {
                 std::fs::remove_file(&args[1]).ok();
                 return None;
             }
-        } else if args[0] == "--tray" {
+        }
+        #[cfg(not(feature = "compass-rmm"))]
+        if args[0] == "--tray" {
             if !crate::check_process("--tray", true) {
                 crate::tray::start_tray();
             }
             return None;
-        } else if args[0] == "--install-service" {
+        }
+        #[cfg(not(feature = "compass-rmm"))]
+        if args[0] == "--install-service" {
             log::info!("start --install-service");
             crate::platform::install_service();
             return None;
-        } else if args[0] == "--uninstall-service" {
+        }
+        #[cfg(not(feature = "compass-rmm"))]
+        if args[0] == "--uninstall-service" {
             log::info!("start --uninstall-service");
             crate::platform::uninstall_service(false, true);
             return None;
-        } else if args[0] == "--service" {
+        }
+        #[cfg(not(feature = "compass-rmm"))]
+        if args[0] == "--service" {
             log::info!("start --service");
             crate::start_os_service();
             return None;
-        } else if args[0] == "--server" {
+        }
+        #[cfg(feature = "compass-rmm")]
+        if args[0] == "--headless" {
+            log::info!("start --headless");
+            // Server config flags (--rendezvous-server, --relay-server, --key) are
+            // already parsed in the early generic block above. Only --password is
+            // headless-specific.
+            let mut i = 1;
+            while i < args.len() {
+                if args[i] == "--password" && i + 1 < args.len() {
+                    i += 1;
+                    config::Config::set_permanent_password(&args[i]);
+                }
+                i += 1;
+            }
+
+            println!(
+                "{}",
+                serde_json::json!({
+                    "event": "started",
+                    "id": config::Config::get_id(),
+                    "version": crate::VERSION,
+                })
+            );
+
+            // Start headless CM listener (in-process, no subprocess)
+            std::thread::spawn(|| {
+                crate::ui_cm_interface::start_ipc(
+                    crate::ui_cm_interface::ConnectionManager {
+                        ui_handler: crate::headless_cm::HeadlessCmHandler,
+                    },
+                );
+            });
+
+            // Start server in foreground (same as --server but no tray)
+            crate::start_server(true, false);
+            return None;
+        }
+        if args[0] == "--server" {
             log::info!("start --server with user {}", crate::username());
             #[cfg(target_os = "linux")]
             {
@@ -397,7 +471,8 @@ pub fn core_main() -> Option<Vec<String>> {
                 hbb_common::allow_err!(handler.join());
             }
             return None;
-        } else if args[0] == "--import-config" {
+        }
+        if args[0] == "--import-config" {
             if args.len() == 2 {
                 let filepath;
                 let path = std::path::Path::new(&args[1]);
@@ -848,3 +923,5 @@ fn is_quick_support_exe(exe: &str) -> bool {
     let exe = exe.to_lowercase();
     exe.contains("-qs-") || exe.contains("-qs.exe") || exe.contains("_qs.exe")
 }
+
+

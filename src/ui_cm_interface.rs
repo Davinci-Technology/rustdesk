@@ -174,6 +174,18 @@ lazy_static::lazy_static! {
 
 static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 
+/// Returns a snapshot of connected clients as tuples for IPC/agent use.
+#[cfg(feature = "compass-rmm")]
+pub fn get_clients_state_tuples() -> Vec<(i32, String, String, bool, bool)> {
+    CLIENTS
+        .read()
+        .unwrap()
+        .iter()
+        .filter(|(_, c)| !c.disconnected)
+        .map(|(_, c)| (c.id, c.peer_id.clone(), c.name.clone(), c.authorized, c.is_file_transfer))
+        .collect()
+}
+
 #[derive(Clone)]
 pub struct ConnectionManager<T: InvokeUiCM> {
     pub ui_handler: T,

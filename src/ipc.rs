@@ -392,6 +392,45 @@ pub enum Data {
     ControlPermissionsRemoteModify(Option<bool>),
     #[cfg(target_os = "windows")]
     FileTransferEnabledState(Option<bool>),
+    #[cfg(feature = "compass-rmm")]
+    AgentQuery(AgentQueryType),
+    #[cfg(feature = "compass-rmm")]
+    AgentResponse(AgentResponseData),
+}
+
+#[cfg(feature = "compass-rmm")]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "t", content = "c")]
+pub enum AgentQueryType {
+    GetId,
+    GetPassword,
+    SetPassword(String),
+    GetConfig,
+    SetConfig { key: String, value: String },
+    GetSessionList,
+    Shutdown,
+}
+
+#[cfg(feature = "compass-rmm")]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "t", content = "c")]
+pub enum AgentResponseData {
+    Id(String),
+    Password(String),
+    Config(HashMap<String, String>),
+    SessionList(Vec<AgentSessionInfo>),
+    Ok,
+    Error(String),
+}
+
+#[cfg(feature = "compass-rmm")]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AgentSessionInfo {
+    pub id: i32,
+    pub peer_id: String,
+    pub name: String,
+    pub authorized: bool,
+    pub is_file_transfer: bool,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -894,6 +933,55 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .send(&Data::FileTransferEnabledState(Some(enabled)))
                     .await
             );
+        }
+        #[cfg(feature = "compass-rmm")]
+        Data::AgentQuery(query) => {
+            let response = match query {
+                AgentQueryType::GetId => {
+                    AgentResponseData::Id(Config::get_id())
+                }
+                AgentQueryType::GetPassword => {
+                    AgentResponseData::Password(Config::get_permanent_password())
+                }
+                AgentQueryType::SetPassword(pw) => {
+                    Config::set_permanent_password(&pw);
+                    AgentResponseData::Ok
+                }
+                AgentQueryType::GetConfig => {
+                    let mut map = HashMap::new();
+                    map.insert("id".to_string(), Config::get_id());
+                    map.insert(
+                        "custom-rendezvous-server".to_string(),
+                        Config::get_option("custom-rendezvous-server"),
+                    );
+                    map.insert("relay-server".to_string(), Config::get_option("relay-server"));
+                    map.insert("key".to_string(), Config::get_option("key"));
+                    AgentResponseData::Config(map)
+                }
+                AgentQueryType::SetConfig { key, value } => {
+                    Config::set_option(key, value);
+                    AgentResponseData::Ok
+                }
+                AgentQueryType::GetSessionList => {
+                    let clients = crate::ui_cm_interface::get_clients_state_tuples();
+                    let sessions: Vec<AgentSessionInfo> = clients
+                        .iter()
+                        .map(|c| AgentSessionInfo {
+                            id: c.0,
+                            peer_id: c.1.clone(),
+                            name: c.2.clone(),
+                            authorized: c.3,
+                            is_file_transfer: c.4,
+                        })
+                        .collect();
+                    AgentResponseData::SessionList(sessions)
+                }
+                AgentQueryType::Shutdown => {
+                    log::info!("Agent requested shutdown");
+                    std::process::exit(0);
+                }
+            };
+            allow_err!(stream.send(&Data::AgentResponse(response)).await);
         }
         _ => {}
     }

@@ -1,11 +1,25 @@
 #![cfg_attr(
-    all(not(debug_assertions), target_os = "windows"),
+    all(
+        not(debug_assertions),
+        target_os = "windows",
+        not(feature = "compass-rmm")
+    ),
     windows_subsystem = "windows"
 )]
 
 use librustdesk::*;
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+#[cfg(feature = "compass-rmm")]
+fn main() {
+    // core_main handles global_init internally
+    crate::core_main::core_main();
+    common::global_clean();
+}
+
+#[cfg(all(
+    any(target_os = "android", target_os = "ios", feature = "flutter"),
+    not(feature = "compass-rmm")
+))]
 fn main() {
     if !common::global_init() {
         eprintln!("Global initialization failed.");
@@ -20,7 +34,8 @@ fn main() {
     target_os = "android",
     target_os = "ios",
     feature = "cli",
-    feature = "flutter"
+    feature = "flutter",
+    feature = "compass-rmm"
 )))]
 fn main() {
     #[cfg(all(windows, not(feature = "inline")))]
@@ -33,7 +48,7 @@ fn main() {
     common::global_clean();
 }
 
-#[cfg(feature = "cli")]
+#[cfg(all(feature = "cli", not(feature = "compass-rmm")))]
 fn main() {
     if !common::global_init() {
         return;

@@ -13,6 +13,15 @@ name = "librustdesk"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [[bin]]
+name = "rustdesk"
+path = "src/main.rs"
+
+[[bin]]
+name = "compass-rmm"
+path = "src/main.rs"
+required-features = ["compass-rmm"]
+
+[[bin]]
 name = "naming"
 path = "src/naming.rs"
 
@@ -41,6 +50,7 @@ unix-file-copy-paste = [
     "clipboard/unix-file-copy-paste",
 ]
 screencapturekit = ["cpal/screencapturekit"]
+compass-rmm = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
