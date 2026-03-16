@@ -1,0 +1,61 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job">
+  <description>One-time setup: install build tools on Windows runner</description>
+  <keepDependencies>false</keepDependencies>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
+    <script>
+pipeline {
+    agent { label 'windows' }
+    stages {
+        stage('Install VS Build Tools') {
+            steps {
+                bat 'where cl >nul 2>&amp;1 &amp;&amp; echo MSVC already installed &amp;&amp; exit /b 0'
+                bat 'curl -L -o vs_buildtools.exe "https://aka.ms/vs/17/release/vs_BuildTools.exe"'
+                bat 'start /wait vs_buildtools.exe --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621 --includeRecommended'
+                bat 'del vs_buildtools.exe'
+            }
+        }
+        stage('Install Rust') {
+            steps {
+                bat 'where rustc >nul 2>&amp;1 &amp;&amp; echo Rust already installed &amp;&amp; exit /b 0'
+                bat 'curl -L -o rustup-init.exe https://win.rustup.rs/x86_64'
+                bat 'rustup-init.exe -y --default-toolchain stable'
+                bat 'del rustup-init.exe'
+                bat 'set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% &amp;&amp; rustup toolchain install nightly --no-self-update'
+                bat 'set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% &amp;&amp; rustc --version'
+            }
+        }
+        stage('Install Cargo Tools') {
+            steps {
+                bat 'set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% &amp;&amp; cargo install cargo-expand --version 1.0.100 --locked'
+                bat 'set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% &amp;&amp; cargo install flutter_rust_bridge_codegen --version 1.80.1'
+            }
+        }
+        stage('Install vcpkg') {
+            steps {
+                bat 'if exist C:\\vcpkg\\vcpkg.exe (echo vcpkg already installed) else (cd C:\\ &amp;&amp; git clone https://github.com/microsoft/vcpkg.git &amp;&amp; cd vcpkg &amp;&amp; call bootstrap-vcpkg.bat -disableMetrics &amp;&amp; vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static)'
+            }
+        }
+        stage('Install Flutter 3.24.5') {
+            steps {
+                bat 'if exist C:\\flutter\\bin\\flutter.bat (echo Flutter already installed) else (cd C:\\ &amp;&amp; git clone https://github.com/flutter/flutter.git -b stable --depth=1 &amp;&amp; cd flutter &amp;&amp; git fetch --tags --depth=1 origin refs/tags/3.24.5 &amp;&amp; git checkout 3.24.5 &amp;&amp; C:\\flutter\\bin\\flutter --version &amp;&amp; C:\\flutter\\bin\\flutter config --no-analytics)'
+            }
+        }
+        stage('Enable Developer Mode') {
+            steps {
+                bat 'reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock" /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1'
+            }
+        }
+        stage('Verify') {
+            steps {
+                bat 'set PATH=%USERPROFILE%\\.cargo\\bin;C:\\flutter\\bin;%PATH% &amp;&amp; rustc --version &amp;&amp; cargo --version &amp;&amp; cargo expand --version &amp;&amp; flutter_rust_bridge_codegen --version &amp;&amp; flutter --version &amp;&amp; C:\\vcpkg\\vcpkg version &amp;&amp; python --version &amp;&amp; echo Setup complete!'
+            }
+        }
+    }
+}
+    </script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>
