@@ -1,0 +1,129 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job">
+  <description>Build compass-rmm.exe, librustdesk.dll, and compass-viewer.exe</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
+      <abortPrevious>false</abortPrevious>
+    </org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
+    <script><![CDATA[def VCVARS = 'call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64'
+def SETPATH = 'set PATH=%USERPROFILE%\\.cargo\\bin;C:\\flutter\\bin;%PATH%'
+
+pipeline {
+    agent { label 'windows' }
+
+    environment {
+        VCPKG_ROOT     = 'C:\\vcpkg'
+        COMPASS_VIEWER = '1'
+        LIBCLANG_PATH  = 'C:\\Program Files\\LLVM\\bin'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/compass-rmm']],
+                    extensions: [[$class: 'SubmoduleOption', recursiveSubmodules: true, parentCredentials: true]],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/Davinci-Technology/rustdesk.git'
+                    ]]
+                ])
+            }
+        }
+
+        stage('Check Tools') {
+            steps {
+                bat "${VCVARS} && ${SETPATH} && rustc --version && cargo --version && flutter --version && cargo expand --version && flutter_rust_bridge_codegen --version && link /? >nul 2>&1 && echo link.exe OK"
+            }
+        }
+
+        stage('Flutter Rust Bridge Codegen') {
+            steps {
+                powershell '''
+                    $lines = Get-Content Cargo.toml
+                    $out = @()
+                    $inBin = $false
+                    foreach ($line in $lines) {
+                        if ($line -match '^default-run = ') {
+                            $out += "#$line"
+                            continue
+                        }
+                        if ($line -match '^\\[\\[bin\\]\\]') {
+                            $inBin = $true
+                            $out += "#$line"
+                            continue
+                        }
+                        if ($inBin -and $line -match '^(name|path|required-features) = ') {
+                            $out += "#$line"
+                            continue
+                        }
+                        if ($inBin -and $line -match '^\\s*$') {
+                            $inBin = $false
+                        }
+                        if ($line -match '^\\[package\\]') {
+                            $out += $line
+                            $out += 'autobins = false'
+                            continue
+                        }
+                        if ($line -eq 'default = ["use_dasp"]') {
+                            $out += 'default = ["use_dasp", "flutter"]'
+                            continue
+                        }
+                        $out += $line
+                    }
+                    $out | Set-Content Cargo.toml
+                '''
+                bat "${VCVARS} && ${SETPATH} && cd flutter && flutter pub get && cd .."
+                bat "${VCVARS} && ${SETPATH} && flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --rust-crate-dir . --rust-output ./src/bridge_generated.rs --skip-deps-check --class-name Rustdesk"
+                bat 'git checkout -- Cargo.toml'
+                powershell '''
+                    $lines = (Get-Content flutter/lib/generated_bridge.dart).Count
+                    Write-Host "generated_bridge.dart: $lines lines"
+                    if ($lines -lt 1000) { throw "Codegen failed: only $lines lines" }
+                '''
+            }
+        }
+
+        stage('Build compass-rmm.exe') {
+            steps {
+                bat "${VCVARS} && ${SETPATH} && cargo build --bin compass-rmm --features compass-rmm --release"
+            }
+        }
+
+        stage('Build librustdesk.dll') {
+            steps {
+                bat "${VCVARS} && ${SETPATH} && cargo build --lib --features compass-rmm,flutter --release"
+            }
+        }
+
+        stage('Build Flutter Viewer') {
+            steps {
+                bat "${VCVARS} && ${SETPATH} && cd flutter && flutter pub get && flutter build windows --release"
+            }
+        }
+
+        stage('Package') {
+            steps {
+                bat 'mkdir artifacts 2>nul & copy target\\release\\compass-rmm.exe artifacts\\ & xcopy /E /I /Y flutter\\build\\windows\\x64\\runner\\Release\\* artifacts\\'
+                archiveArtifacts artifacts: 'artifacts/**', fingerprint: true
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo 'Build succeeded! Artifacts archived.'
+        }
+    }
+}]]></script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

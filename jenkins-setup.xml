@@ -1,0 +1,60 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job">
+  <description>One-time setup: install build tools on Windows runner</description>
+  <keepDependencies>false</keepDependencies>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
+    <script><![CDATA[pipeline {
+    agent { label 'windows' }
+    stages {
+        stage('Install VS Build Tools') {
+            steps {
+                bat 'where cl >nul 2>&1 || (curl -L -o vs_buildtools.exe "https://aka.ms/vs/17/release/vs_BuildTools.exe" && start /wait vs_buildtools.exe --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621 --includeRecommended && del vs_buildtools.exe 2>nul)'
+            }
+        }
+        stage('Install Rust') {
+            steps {
+                bat 'where rustc >nul 2>&1 || (curl -L -o rustup-init.exe https://win.rustup.rs/x86_64 && rustup-init.exe -y --default-toolchain stable && del rustup-init.exe)'
+                bat 'set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && rustup toolchain install nightly --no-self-update'
+                bat 'set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && rustc --version'
+            }
+        }
+        stage('Install Cargo Tools') {
+            steps {
+                bat 'call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64 && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo install cargo-expand --version 1.0.100 --locked'
+                bat 'call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64 && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo install flutter_rust_bridge_codegen --version 1.80.1'
+            }
+        }
+        stage('Install vcpkg') {
+            steps {
+                bat 'if not exist C:\\vcpkg (cd C:\\ && git clone https://github.com/microsoft/vcpkg.git)'
+                bat 'if not exist C:\\vcpkg\\vcpkg.exe (cd C:\\vcpkg && call bootstrap-vcpkg.bat -disableMetrics)'
+                bat 'C:\\vcpkg\\vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static'
+            }
+        }
+        stage('Install Flutter 3.24.5') {
+            steps {
+                bat 'if exist C:\\flutter\\bin\\flutter.bat (echo Flutter OK) else (cd C:\\ && git clone https://github.com/flutter/flutter.git -b stable --depth=1 && cd flutter && git fetch --tags --depth=1 origin refs/tags/3.24.5 && git checkout 3.24.5 && C:\\flutter\\bin\\flutter --version && C:\\flutter\\bin\\flutter config --no-analytics)'
+            }
+        }
+        stage('Install LLVM') {
+            steps {
+                bat 'if exist "C:\\Program Files\\LLVM\\bin\\libclang.dll" (echo LLVM OK) else (curl -L -o llvm-installer.exe "https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/LLVM-18.1.8-win64.exe" && llvm-installer.exe /S /D=C:\\Program Files\\LLVM && del llvm-installer.exe 2>nul)'
+            }
+        }
+        stage('Enable Developer Mode') {
+            steps {
+                bat 'reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock" /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1'
+            }
+        }
+        stage('Verify') {
+            steps {
+                bat 'call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64 && set PATH=%USERPROFILE%\\.cargo\\bin;C:\\flutter\\bin;%PATH% && git --version && rustc --version && cargo --version && cargo expand --version && flutter_rust_bridge_codegen --version && flutter --version && C:\\vcpkg\\vcpkg version && link.exe /? >nul 2>&1 && echo link.exe OK && echo Setup complete!'
+            }
+        }
+    }
+}]]></script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>
