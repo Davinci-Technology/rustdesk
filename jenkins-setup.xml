@@ -6,11 +6,6 @@
     <script><![CDATA[pipeline {
     agent { label 'windows' }
     stages {
-        stage('Install VS Build Tools') {
-            steps {
-                bat 'where cl >nul 2>&1 || (curl -L -o vs_buildtools.exe "https://aka.ms/vs/17/release/vs_BuildTools.exe" && start /wait vs_buildtools.exe --quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621 --includeRecommended && del vs_buildtools.exe 2>nul)'
-            }
-        }
         stage('Install Rust') {
             steps {
                 bat 'where rustc >nul 2>&1 || (curl -L -o rustup-init.exe https://win.rustup.rs/x86_64 && rustup-init.exe -y --default-toolchain stable && del rustup-init.exe)'
@@ -20,8 +15,12 @@
         }
         stage('Install Cargo Tools') {
             steps {
-                bat 'call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64 && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo install cargo-expand --version 1.0.100 --locked'
-                bat 'call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64 && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo install flutter_rust_bridge_codegen --version 1.80.1'
+                bat '''call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64
+set PATH=%USERPROFILE%\\.cargo\\bin;%PATH%
+cargo install cargo-expand --version 1.0.100 --locked'''
+                bat '''call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64
+set PATH=%USERPROFILE%\\.cargo\\bin;%PATH%
+cargo install flutter_rust_bridge_codegen --version 1.80.1'''
             }
         }
         stage('Install vcpkg') {
@@ -48,7 +47,16 @@
         }
         stage('Verify') {
             steps {
-                bat 'call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64 && set PATH=%USERPROFILE%\\.cargo\\bin;C:\\flutter\\bin;%PATH% && git --version && rustc --version && cargo --version && cargo expand --version && flutter_rust_bridge_codegen --version && flutter --version && C:\\vcpkg\\vcpkg version && link.exe /? >nul 2>&1 && echo link.exe OK && echo Setup complete!'
+                bat '''call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64
+set PATH=%USERPROFILE%\\.cargo\\bin;C:\\flutter\\bin;%PATH%
+rustc --version
+cargo --version
+cargo expand --version
+flutter_rust_bridge_codegen --version
+flutter --version
+C:\\vcpkg\\vcpkg version
+where link.exe
+echo Setup complete!'''
             }
         }
     }

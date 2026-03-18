@@ -1,0 +1,128 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job">
+  <description>Build compass-rmm and compass-viewer for macOS</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
+      <abortPrevious>false</abortPrevious>
+    </org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
+    <script><![CDATA[pipeline {
+    agent { label 'macOS' }
+
+    environment {
+        VCPKG_ROOT     = '/Users/ryanhulsker/vcpkg'
+        COMPASS_VIEWER = '1'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/compass-rmm']],
+                    extensions: [[$class: 'SubmoduleOption', recursiveSubmodules: true, parentCredentials: true]],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/Davinci-Technology/rustdesk.git'
+                    ]]
+                ])
+            }
+        }
+
+        stage('Check Tools') {
+            steps {
+                sh '''. "$HOME/.cargo/env"
+export PATH="$HOME/flutter/bin:$PATH"
+rustc --version
+cargo --version
+flutter --version
+cargo expand --version
+flutter_rust_bridge_codegen --version'''
+            }
+        }
+
+        stage('Flutter Rust Bridge Codegen') {
+            steps {
+                sh '''#!/bin/bash
+cat > /tmp/patch_cargo_toml.py << 'PYEOF'
+import re
+text = open("Cargo.toml").read()
+text = re.sub(r"^default-run = .*$", lambda m: "#" + m.group(), text, flags=re.MULTILINE)
+text = re.sub(r"^\\[\\[bin\\]\\].*?(?=\\n\\[)", lambda m: re.sub(r"^(?!#)", "#", m.group(), flags=re.MULTILINE), text, flags=re.DOTALL|re.MULTILINE)
+text = text.replace("[package]", "[package]\\nautobins = false", 1)
+text = text.replace('default = ["use_dasp"]', 'default = ["use_dasp", "flutter"]')
+open("Cargo.toml", "w").write(text)
+PYEOF
+python3 /tmp/patch_cargo_toml.py'''
+                sh '''. "$HOME/.cargo/env"
+export PATH="$HOME/flutter/bin:$PATH"
+cd flutter && flutter pub get && cd ..'''
+                sh '''. "$HOME/.cargo/env"
+export PATH="$HOME/flutter/bin:$PATH"
+flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --rust-crate-dir . --rust-output ./src/bridge_generated.rs --skip-deps-check --class-name Rustdesk'''
+                sh 'git checkout -- Cargo.toml'
+                sh '''
+                    LINES=$(wc -l < flutter/lib/generated_bridge.dart)
+                    echo "generated_bridge.dart: $LINES lines"
+                    if [ "$LINES" -lt 1000 ]; then echo "Codegen failed: only $LINES lines"; exit 1; fi
+                '''
+            }
+        }
+
+        stage('Build compass-rmm') {
+            steps {
+                sh '''. "$HOME/.cargo/env"
+export VCPKG_ROOT="$HOME/vcpkg"
+cargo build --bin compass-rmm --features compass-rmm --release'''
+            }
+        }
+
+        stage('Build librustdesk.dylib') {
+            steps {
+                sh '''. "$HOME/.cargo/env"
+export VCPKG_ROOT="$HOME/vcpkg"
+cargo build --lib --features compass-rmm,flutter --release'''
+            }
+        }
+
+        stage('Build Flutter Viewer') {
+            steps {
+                sh '''. "$HOME/.cargo/env"
+export PATH="$HOME/flutter/bin:$PATH"
+cd flutter && flutter pub get && flutter build macos --release'''
+            }
+        }
+
+        stage('Package') {
+            steps {
+                sh '''
+                    mkdir -p artifacts
+
+                    # compass-rmm.zip - standalone headless agent
+                    cd target/release && zip ../../artifacts/compass-rmm-macos.zip compass-rmm && cd ../..
+
+                    # compass-viewer.zip - viewer .app bundle
+                    cd flutter/build/macos/Build/Products/Release
+                    zip -r ../../../../../../artifacts/compass-viewer-macos.zip *.app
+                    cd ../../../../../..
+                '''
+                archiveArtifacts artifacts: 'artifacts/*.zip', fingerprint: true
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo 'Build succeeded! Artifacts archived.'
+        }
+    }
+}]]></script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

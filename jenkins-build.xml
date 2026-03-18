@@ -8,16 +8,14 @@
     </org.jenkinsci.plugins.workflow.job.properties.DisableConcurrentBuildsJobProperty>
   </properties>
   <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
-    <script><![CDATA[def VCVARS = 'call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64'
-def SETPATH = 'set PATH=%USERPROFILE%\\.cargo\\bin;C:\\flutter\\bin;%PATH%'
-
-pipeline {
+    <script><![CDATA[pipeline {
     agent { label 'windows' }
 
     environment {
-        VCPKG_ROOT     = 'C:\\vcpkg'
-        COMPASS_VIEWER = '1'
-        LIBCLANG_PATH  = 'C:\\Program Files\\LLVM\\bin'
+        VCPKG_ROOT              = 'C:\\vcpkg'
+        VCPKG_INSTALLATION_ROOT = 'C:\\vcpkg'
+        COMPASS_VIEWER          = '1'
+        LIBCLANG_PATH           = 'C:\\Program Files\\LLVM\\bin'
     }
 
     stages {
@@ -36,7 +34,15 @@ pipeline {
 
         stage('Check Tools') {
             steps {
-                bat "${VCVARS} && ${SETPATH} && rustc --version && cargo --version && flutter --version && cargo expand --version && flutter_rust_bridge_codegen --version && link /? >nul 2>&1 && echo link.exe OK"
+                bat '''call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64
+set VCPKG_ROOT=C:\\vcpkg
+set PATH=%USERPROFILE%\\.cargo\\bin;C:\\flutter\\bin;%PATH%
+rustc --version
+cargo --version
+flutter --version
+cargo expand --version
+flutter_rust_bridge_codegen --version
+where link.exe'''
             }
         }
 
@@ -76,8 +82,14 @@ pipeline {
                     }
                     $out | Set-Content Cargo.toml
                 '''
-                bat "${VCVARS} && ${SETPATH} && cd flutter && flutter pub get && cd .."
-                bat "${VCVARS} && ${SETPATH} && flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --rust-crate-dir . --rust-output ./src/bridge_generated.rs --skip-deps-check --class-name Rustdesk"
+                bat '''call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64
+set VCPKG_ROOT=C:\\vcpkg
+set PATH=%USERPROFILE%\\.cargo\\bin;C:\\flutter\\bin;%PATH%
+cd flutter && flutter pub get && cd ..'''
+                bat '''call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64
+set VCPKG_ROOT=C:\\vcpkg
+set PATH=%USERPROFILE%\\.cargo\\bin;C:\\flutter\\bin;%PATH%
+flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --rust-crate-dir . --rust-output ./src/bridge_generated.rs --skip-deps-check --class-name Rustdesk'''
                 bat 'git checkout -- Cargo.toml'
                 powershell '''
                     $lines = (Get-Content flutter/lib/generated_bridge.dart).Count
@@ -89,26 +101,43 @@ pipeline {
 
         stage('Build compass-rmm.exe') {
             steps {
-                bat "${VCVARS} && ${SETPATH} && cargo build --bin compass-rmm --features compass-rmm --release"
+                bat '''call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64
+set VCPKG_ROOT=C:\\vcpkg
+set PATH=%USERPROFILE%\\.cargo\\bin;C:\\flutter\\bin;%PATH%
+cargo build --bin compass-rmm --features compass-rmm --release'''
             }
         }
 
         stage('Build librustdesk.dll') {
             steps {
-                bat "${VCVARS} && ${SETPATH} && cargo build --lib --features compass-rmm,flutter --release"
+                bat '''call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64
+set VCPKG_ROOT=C:\\vcpkg
+set PATH=%USERPROFILE%\\.cargo\\bin;C:\\flutter\\bin;%PATH%
+cargo build --lib --features compass-rmm,flutter --release'''
             }
         }
 
         stage('Build Flutter Viewer') {
             steps {
-                bat "${VCVARS} && ${SETPATH} && cd flutter && flutter pub get && flutter build windows --release"
+                bat '''call "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat" x64
+set VCPKG_ROOT=C:\\vcpkg
+set PATH=%USERPROFILE%\\.cargo\\bin;C:\\flutter\\bin;%PATH%
+cd flutter && flutter pub get && flutter build windows --release'''
             }
         }
 
         stage('Package') {
             steps {
-                bat 'mkdir artifacts 2>nul & copy target\\release\\compass-rmm.exe artifacts\\ & xcopy /E /I /Y flutter\\build\\windows\\x64\\runner\\Release\\* artifacts\\'
-                archiveArtifacts artifacts: 'artifacts/**', fingerprint: true
+                powershell '''
+                    New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+
+                    # compass-rmm.zip - standalone headless agent
+                    Compress-Archive -Path target\\release\\compass-rmm.exe -DestinationPath artifacts\\compass-rmm.zip -Force
+
+                    # compass-viewer.zip - viewer + all runtime deps
+                    Compress-Archive -Path flutter\\build\\windows\\x64\\runner\\Release\\* -DestinationPath artifacts\\compass-viewer.zip -Force
+                '''
+                archiveArtifacts artifacts: 'artifacts/*.zip', fingerprint: true
             }
         }
     }

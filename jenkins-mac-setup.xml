@@ -1,0 +1,70 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job">
+  <description>One-time setup: install build tools on macOS runner</description>
+  <keepDependencies>false</keepDependencies>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
+    <script><![CDATA[pipeline {
+    agent { label 'macOS' }
+    stages {
+        stage('Install Rust') {
+            steps {
+                sh 'which rustc || (curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable)'
+                sh '. "$HOME/.cargo/env" && rustup toolchain install nightly --no-self-update'
+                sh '. "$HOME/.cargo/env" && rustup target add aarch64-apple-darwin x86_64-apple-darwin'
+                sh '. "$HOME/.cargo/env" && rustc --version'
+            }
+        }
+        stage('Install Cargo Tools') {
+            steps {
+                sh '. "$HOME/.cargo/env" && cargo install cargo-expand --version 1.0.100 --locked'
+                sh '. "$HOME/.cargo/env" && cargo install flutter_rust_bridge_codegen --version 1.80.1'
+            }
+        }
+        stage('Install Homebrew Deps') {
+            steps {
+                sh 'brew install llvm opus libvpx aom nasm || true'
+            }
+        }
+        stage('Install vcpkg') {
+            steps {
+                sh 'test -d "$HOME/vcpkg" || git clone https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"'
+                sh 'test -x "$HOME/vcpkg/vcpkg" || (cd "$HOME/vcpkg" && ./bootstrap-vcpkg.sh -disableMetrics)'
+                sh '"$HOME/vcpkg/vcpkg" install libvpx:arm64-osx libyuv:arm64-osx opus:arm64-osx aom:arm64-osx'
+            }
+        }
+        stage('Install Flutter 3.24.5') {
+            steps {
+                sh '''
+                    if [ -x "$HOME/flutter/bin/flutter" ]; then
+                        echo "Flutter OK"
+                    else
+                        git clone https://github.com/flutter/flutter.git -b stable --depth=1 "$HOME/flutter"
+                        cd "$HOME/flutter"
+                        git fetch --tags --depth=1 origin refs/tags/3.24.5
+                        git checkout 3.24.5
+                        "$HOME/flutter/bin/flutter" --version
+                        "$HOME/flutter/bin/flutter" config --no-analytics
+                    fi
+                '''
+            }
+        }
+        stage('Verify') {
+            steps {
+                sh '''. "$HOME/.cargo/env"
+export PATH="$HOME/flutter/bin:$PATH"
+rustc --version
+cargo --version
+cargo expand --version
+flutter_rust_bridge_codegen --version
+flutter --version
+"$HOME/vcpkg/vcpkg" version
+echo "Setup complete!"'''
+            }
+        }
+    }
+}]]></script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>
