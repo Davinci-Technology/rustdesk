@@ -22,7 +22,7 @@
         }
         stage('Install Homebrew Deps') {
             steps {
-                sh 'brew install llvm opus libvpx aom nasm || true'
+                sh 'brew install llvm opus libvpx aom nasm cocoapods || true'
             }
         }
         stage('Install vcpkg') {
