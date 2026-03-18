@@ -459,11 +459,11 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             #[cfg(windows)]
             crate::privacy_mode::restore_reg_connectivity(true, false);
-            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            #[cfg(any(target_os = "linux", target_os = "windows", feature = "compass-rmm"))]
             {
                 crate::start_server(true, false);
             }
-            #[cfg(target_os = "macos")]
+            #[cfg(all(target_os = "macos", not(feature = "compass-rmm")))]
             {
                 let handler = std::thread::spawn(move || crate::start_server(true, false));
                 crate::tray::start_tray();
