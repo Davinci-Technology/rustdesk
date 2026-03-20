@@ -1869,6 +1869,19 @@ impl Connection {
     }
 
     fn try_start_cm(&mut self, peer_id: String, name: String, authorized: bool) {
+        #[cfg(all(target_os = "windows", feature = "compass-rmm"))]
+        {
+            let peer_display = if name.is_empty() {
+                peer_id.clone()
+            } else {
+                format!("{} ({})", name, peer_id)
+            };
+            let msg = format!("Remote session from {}", peer_display);
+            // Spawn --toast as the user so WinRT notifications work
+            if let Err(e) = crate::platform::run_as_user(vec!["--toast", &msg]) {
+                log::warn!("Failed to show toast: {:?}", e);
+            }
+        }
         self.send_to_cm(ipc::Data::Login {
             id: self.inner.id(),
             is_file_transfer: self.file_transfer.is_some(),

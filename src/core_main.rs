@@ -408,6 +408,17 @@ pub fn core_main() -> Option<Vec<String>> {
             crate::start_os_service();
             return None;
         }
+        #[cfg(all(feature = "compass-rmm", target_os = "windows"))]
+        if args[0] == "--toast" {
+            // Show a Windows toast notification and exit.
+            // Launched as the user in the interactive session by the --server child.
+            let message = if args.len() > 1 { args[1..].join(" ") } else { "Connected".into() };
+            let _ = tauri_winrt_notification::Toast::new("CompassRMM")
+            .title("Compass RMM")
+            .text1(&message)
+            .show();
+            return None;
+        }
         #[cfg(feature = "compass-rmm")]
         if args[0] == "--headless" {
             log::info!("start --headless");
@@ -430,6 +441,15 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(windows)]
             {
                 crate::privacy_mode::restore_reg_connectivity(true, false);
+                // Start the CM IPC listener so the --server child can connect
+                // to the connection manager pipe without errors.
+                std::thread::spawn(|| {
+                    crate::ui_cm_interface::start_ipc(
+                        crate::ui_cm_interface::ConnectionManager {
+                            ui_handler: crate::headless_cm::HeadlessCmHandler,
+                        },
+                    );
+                });
                 // Run a supervisor loop that spawns --server in the active
                 // interactive session, just like the real Windows Service does.
                 // This is needed because Session 0 has no display.
