@@ -422,26 +422,15 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
                 i += 1;
             }
-
-            println!(
-                "{}",
-                serde_json::json!({
-                    "event": "started",
-                    "id": config::Config::get_id(),
-                    "version": crate::VERSION,
-                })
+            // Fall through to the --server path below — headless is just
+            // "normal server mode with config injected from CLI args".
+            log::info!(
+                "compass-rmm starting as server (id={}, version={})",
+                config::Config::get_id(),
+                crate::VERSION,
             );
-
-            // Start headless CM listener (in-process, no subprocess)
-            std::thread::spawn(|| {
-                crate::ui_cm_interface::start_ipc(
-                    crate::ui_cm_interface::ConnectionManager {
-                        ui_handler: crate::headless_cm::HeadlessCmHandler,
-                    },
-                );
-            });
-
-            // Start server in foreground (same as --server but no tray)
+            #[cfg(windows)]
+            crate::privacy_mode::restore_reg_connectivity(true, false);
             crate::start_server(true, false);
             return None;
         }
