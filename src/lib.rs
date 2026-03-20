@@ -56,8 +56,7 @@ pub mod plugin;
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "compass-rmm")))]
 mod tray;
 
-#[cfg(feature = "compass-rmm")]
-pub mod headless_cm;
+// headless_cm removed — compass-rmm now uses the normal server path with IPC
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod whiteboard;
