@@ -422,16 +422,25 @@ pub fn core_main() -> Option<Vec<String>> {
                 }
                 i += 1;
             }
-            // Fall through to the --server path below — headless is just
-            // "normal server mode with config injected from CLI args".
             log::info!(
-                "compass-rmm starting as server (id={}, version={})",
+                "compass-rmm starting as supervisor (id={}, version={})",
                 config::Config::get_id(),
                 crate::VERSION,
             );
             #[cfg(windows)]
-            crate::privacy_mode::restore_reg_connectivity(true, false);
-            crate::start_server(true, false);
+            {
+                crate::privacy_mode::restore_reg_connectivity(true, false);
+                // Run a supervisor loop that spawns --server in the active
+                // interactive session, just like the real Windows Service does.
+                // This is needed because Session 0 has no display.
+                crate::platform::headless_supervisor();
+            }
+            #[cfg(not(windows))]
+            {
+                // On macOS/Linux the agent already runs in the user session,
+                // so we can start the server directly.
+                crate::start_server(true, false);
+            }
             return None;
         }
         if args[0] == "--server" {

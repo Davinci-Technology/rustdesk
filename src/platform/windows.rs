@@ -716,6 +716,54 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     Ok(())
 }
 
+/// Simplified supervisor loop for compass-rmm --headless mode.
+/// Spawns --server in the active interactive session and monitors for
+/// session changes, just like run_service() does for the real Windows Service.
+#[cfg(feature = "compass-rmm")]
+#[tokio::main(flavor = "current_thread")]
+pub async fn headless_supervisor() {
+    use hbb_common::sleep;
+
+    let mut session_id = unsafe { get_current_session(share_rdp()) };
+    log::info!("headless supervisor: initial session {}", session_id);
+    let mut h_process = launch_server(session_id, true).await.unwrap_or(NULL);
+
+    loop {
+        sleep(super::SERVICE_INTERVAL as f32 / 1000.0).await;
+        unsafe {
+            let current = get_current_session(share_rdp());
+            if current == 0xFFFFFFFF {
+                continue;
+            }
+            // Session changed — relaunch in new session
+            if current != session_id {
+                log::info!(
+                    "headless supervisor: session changed {} -> {}",
+                    session_id,
+                    current
+                );
+                session_id = current;
+                send_close_async("").await.ok();
+                h_process = launch_server(session_id, false).await.unwrap_or(NULL);
+                continue;
+            }
+            // Server process exited — relaunch
+            let mut exit_code: DWORD = 0;
+            if h_process.is_null()
+                || (GetExitCodeProcess(h_process, &mut exit_code) == TRUE
+                    && exit_code != STILL_ACTIVE
+                    && CloseHandle(h_process) == TRUE)
+            {
+                log::info!("headless supervisor: server exited, relaunching");
+                match launch_server(session_id, true).await {
+                    Ok(ptr) => h_process = ptr,
+                    Err(err) => log::error!("Failed to relaunch server: {}", err),
+                }
+            }
+        }
+    }
+}
+
 async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDLE> {
     if close_first {
         // in case started some elsewhere
