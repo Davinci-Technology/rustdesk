@@ -18,6 +18,21 @@ use std::{fs::File, io::prelude::*};
 #[cfg(all(feature = "flutter", feature = "plugin_framework"))]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::plugin::ipc::Plugin;
+
+#[cfg(feature = "compass-rmm")]
+use tokio::sync::Notify;
+
+#[cfg(feature = "compass-rmm")]
+lazy_static::lazy_static! {
+    /// Notified when the rendezvous relay registration completes.
+    static ref RELAY_REGISTERED: Notify = Notify::new();
+}
+
+/// Call from the rendezvous mediator when RegisterPeerResponse is received.
+#[cfg(feature = "compass-rmm")]
+pub fn notify_relay_registered() {
+    RELAY_REGISTERED.notify_waiters();
+}
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use clipboard::ClipboardFile;
 use hbb_common::{
@@ -409,6 +424,8 @@ pub enum AgentQueryType {
     SetConfig { key: String, value: String },
     GetSessionList,
     Shutdown,
+    /// Block until the rendezvous relay registration is complete (or timeout).
+    WaitOnline { timeout_ms: u64 },
 }
 
 #[cfg(feature = "compass-rmm")]
@@ -419,6 +436,7 @@ pub enum AgentResponseData {
     Password(String),
     Config(HashMap<String, String>),
     SessionList(Vec<AgentSessionInfo>),
+    OnlineStatus(bool),
     Ok,
     Error(String),
 }
@@ -979,6 +997,24 @@ async fn handle(data: Data, stream: &mut Connection) {
                 AgentQueryType::Shutdown => {
                     log::info!("Agent requested shutdown");
                     std::process::exit(0);
+                }
+                AgentQueryType::WaitOnline { timeout_ms } => {
+                    // Check if already online
+                    if config::get_online_state() > 0 {
+                        AgentResponseData::OnlineStatus(true)
+                    } else {
+                        // Wait for the relay registration notification
+                        let wait = RELAY_REGISTERED.notified();
+                        match tokio::time::timeout(
+                            std::time::Duration::from_millis(timeout_ms),
+                            wait,
+                        )
+                        .await
+                        {
+                            Ok(_) => AgentResponseData::OnlineStatus(true),
+                            Err(_) => AgentResponseData::OnlineStatus(false),
+                        }
+                    }
                 }
             };
             allow_err!(stream.send(&Data::AgentResponse(response)).await);
