@@ -1877,10 +1877,18 @@ impl Connection {
                 format!("{} ({})", name, peer_id)
             };
             let msg = format!("Remote session from {}", peer_display);
-            // Spawn --toast as the user so WinRT notifications work
-            if let Err(e) = crate::platform::run_as_user(vec!["--toast", &msg]) {
-                log::warn!("Failed to show toast: {:?}", e);
-            }
+            // Show toast directly from --server process (already in user session).
+            // No need to spawn a separate process — keeps COM objects alive.
+            std::thread::spawn(move || {
+                match tauri_winrt_notification::Toast::new("CompassRMM")
+                    .title("Compass RMM")
+                    .text1(&msg)
+                    .show()
+                {
+                    Ok(_) => log::info!("Toast shown: {}", msg),
+                    Err(e) => log::warn!("Failed to show toast: {:?}", e),
+                }
+            });
         }
         self.send_to_cm(ipc::Data::Login {
             id: self.inner.id(),
