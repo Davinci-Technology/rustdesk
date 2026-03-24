@@ -21,7 +21,7 @@
             steps {
                 checkout([
                     $class: 'GitSCM',
-                    branches: [[name: '*/compass-rmm']],
+                    branches: [[name: '*/compass-rmm-v3']],
                     extensions: [[$class: 'SubmoduleOption', recursiveSubmodules: true, parentCredentials: true]],
                     userRemoteConfigs: [[
                         url: 'https://github.com/Davinci-Technology/rustdesk.git'
