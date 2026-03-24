@@ -1890,6 +1890,26 @@ impl Connection {
                 }
             });
         }
+        #[cfg(all(target_os = "macos", feature = "compass-rmm"))]
+        {
+            let peer_display = if name.is_empty() {
+                peer_id.clone()
+            } else {
+                format!("{} ({})", name, peer_id)
+            };
+            let msg = format!("Remote session from {}", peer_display);
+            std::thread::spawn(move || {
+                let _ = std::process::Command::new("osascript")
+                    .args([
+                        "-e",
+                        &format!(
+                            "display notification \"{}\" with title \"Compass RMM\"",
+                            msg
+                        ),
+                    ])
+                    .output();
+            });
+        }
         self.send_to_cm(ipc::Data::Login {
             id: self.inner.id(),
             is_file_transfer: self.file_transfer.is_some(),

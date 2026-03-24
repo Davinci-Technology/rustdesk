@@ -457,9 +457,29 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             #[cfg(not(windows))]
             {
-                // On macOS/Linux the agent already runs in the user session,
-                // so we can start the server directly.
-                crate::start_server(true, false);
+                // Start the CM IPC listener so incoming connections can reach
+                // the connection manager without spawning a Flutter --cm process.
+                std::thread::spawn(|| {
+                    crate::ui_cm_interface::start_ipc(
+                        crate::ui_cm_interface::ConnectionManager {
+                            ui_handler: crate::headless_cm::HeadlessCmHandler,
+                        },
+                    );
+                });
+                #[cfg(target_os = "macos")]
+                {
+                    // On macOS, input injection (CGEvent) is dispatched to the
+                    // main dispatch queue via QUEUE.exec_async(). We must run
+                    // a CFRunLoop on the main thread to pump that queue,
+                    // otherwise input events are silently dropped.
+                    std::thread::spawn(|| crate::start_server(true, false));
+                    use core_foundation::runloop::CFRunLoop;
+                    CFRunLoop::run_current();
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    crate::start_server(true, false);
+                }
             }
             return None;
         }
