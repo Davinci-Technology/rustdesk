@@ -2604,6 +2604,12 @@ impl LoginConfigHandler {
         }
         // no matter if change, for update file time
         self.save_config(config);
+        // Compass: re-apply the default-muted override after save_config swaps
+        // self.config for the disk-backed copy. Without this, `handle_peer_info`
+        // during login silently undoes the override set in `initialize()` and
+        // the server sees no `disable_audio` option. Matches the design in
+        // `toggle_option("disable-audio")`: session-only, never persisted.
+        self.config.disable_audio.v = true;
         self.supported_encoding = pi.encoding.clone().unwrap_or_default();
         log::info!("peer info supported_encoding:{:?}", self.supported_encoding);
     }
