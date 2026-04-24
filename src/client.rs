@@ -1825,6 +1825,14 @@ impl LoginConfigHandler {
         self.remember = !config.password.is_empty();
         self.config = config;
 
+        // Compass: default audio forwarding OFF for every new session. Protects end
+        // users from sudden volume changes when a technician connects while they're
+        // listening to music or on a call. Never persisted — toggling Mute off in
+        // the viewer only affects the current session, so the next connect is muted
+        // again. See `toggle_option("disable-audio")` below for the matching
+        // no-persist flip behavior.
+        self.config.disable_audio.v = true;
+
         let conn_token = conn_token
             .map(|x| serde_json::from_str::<ConnToken>(&x).ok())
             .flatten();
@@ -2040,6 +2048,25 @@ impl LoginConfigHandler {
     // `toggle_option()` is only called in a session.
     // Custom client advanced settings will not effect this function.
     pub fn toggle_option(&mut self, name: String) -> Option<Message> {
+        // Compass: `disable-audio` is a session-only toggle — never persisted, so every
+        // new session starts muted (see `initialize()` above). Flip the in-memory value
+        // and build the option message without touching disk config.
+        if name == "disable-audio" {
+            self.config.disable_audio.v = !self.config.disable_audio.v;
+            let mut option = OptionMessage::default();
+            option.disable_audio = (if self.config.disable_audio.v {
+                BoolOption::Yes
+            } else {
+                BoolOption::No
+            })
+            .into();
+            let mut misc = Misc::new();
+            misc.set_option(option);
+            let mut msg_out = Message::new();
+            msg_out.set_misc(misc);
+            return Some(msg_out);
+        }
+
         let mut option = OptionMessage::default();
         let mut config = self.load_config();
         if name == "show-remote-cursor" {
@@ -2061,14 +2088,6 @@ impl LoginConfigHandler {
         } else if name == "follow-remote-window" {
             config.follow_remote_window.v = !config.follow_remote_window.v;
             option.follow_remote_window = (if config.follow_remote_window.v {
-                BoolOption::Yes
-            } else {
-                BoolOption::No
-            })
-            .into();
-        } else if name == "disable-audio" {
-            config.disable_audio.v = !config.disable_audio.v;
-            option.disable_audio = (if config.disable_audio.v {
                 BoolOption::Yes
             } else {
                 BoolOption::No
