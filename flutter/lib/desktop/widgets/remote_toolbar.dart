@@ -399,7 +399,11 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     if (widget.ffi.connType == ConnType.defaultConn) {
       toolbarItems.add(_KeyboardMenu(id: widget.id, ffi: widget.ffi));
     }
-    toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
+    // Compass RMM's controlled endpoint is headless and has no chat UI.
+    // Do not offer a chat action that cannot be received or answered.
+    if (appName != 'Compass RMM') {
+      toolbarItems.add(_ChatMenu(id: widget.id, ffi: widget.ffi));
+    }
     if (!isWeb) {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
